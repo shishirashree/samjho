@@ -38,7 +38,7 @@ No build step and nothing to install. It is three plain files: `index.html`, `ap
 
 ## Tests
 ```bash
-npm test                      # 26 offline unit tests (fact checker, dates, calendar, deadlines list, error handling)
+npm test                      # 30 offline unit tests (fact checker, dates, calendar, deadlines list, retries and backup model)
 GEMINI_API_KEY=... npm run eval -- --models gemini-3.8-flash,gemini-3.1-flash-lite --repeats 2
 ```
 **No laptop?** Open `eval.html` on the live site (link at the bottom of the app) and tap **Run the test**. It runs the same evaluation in your browser and lets you copy or download the reports.
@@ -63,7 +63,8 @@ photo/PDF/text ─► Gemini (structured JSON: summary, actions, money, dates, w
 | No API key | Opens Settings and explains |
 | No internet | "Couldn't reach the AI service" |
 | Wrong key | "Your API key was rejected" |
-| Free quota busy (429) | Waits 8 s, retries once, then explains |
+| Free quota busy (429) or Google overloaded (500/503) | Waits 4 s, then 10 s, and retries. Shows "Google's AI is busy — retrying (n)…" |
+| Model stays overloaded | Switches to a backup model and tells the user which one answered |
 | Model retired (404) | Asks you to pick another model |
 | AI returns broken JSON | Retries once, then shows an error |
 | Blurry or dark photo | AI sets `readable:false`, so Samjho shows retake tips |

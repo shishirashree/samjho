@@ -104,7 +104,8 @@ $("run").onclick = async () => {
       today: "2026-11-24", // fixed so results are comparable between runs
       delay: 5000,
       shouldStop: () => stop,
-      log: (m) => {
+      log: (m, isRetry) => {
+        if (isRetry) { $("log").textContent = m + "\n" + $("log").textContent; return; }
         n++;
         $("log").textContent = m + "\n" + $("log").textContent;
         $("bar").style.width = Math.min(100, Math.round((100 * n) / total)) + "%";

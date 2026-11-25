@@ -1,6 +1,6 @@
 // Samjho AI evaluation engine. Shared by the command line (eval/run-eval.mjs)
 // and the in-browser runner (eval.html), so both produce the same report.
-import { explainDocument, numberTokens, callGemini, resultToPlainText } from "../core.js";
+import { explainDocument, numberTokens, callWithRetry, resultToPlainText } from "../core.js";
 import { extractAmounts, extractDates, mentionsScam } from "./textfacts.mjs";
 
 const strip = (n) => (n.includes(".") ? n.replace(/\.?0+$/, "") : n);
@@ -87,7 +87,8 @@ for (const model of models) {
       const label = `${model} ${f.id} run ${i + 1}`;
       const t0 = Date.now();
       try {
-        const r = await explainDocument({ apiKey, model, language: f.language, input: { text: f.text }, today, sleep });
+        // no backup models here: the test must measure the model it says it measures
+        const r = await explainDocument({ apiKey, model, language: f.language, input: { text: f.text }, today, sleep, onRetry: (e, n) => log(`${label}: busy, retry ${n}`, true) });
         const s = score(r, f.expect);
         runs.push({ ok: true, ms: Date.now() - t0, ...s, cmp: compareSamjho(r, f), raw: r });
         log(`${label}: ${s.passed ? "PASS" : "FAIL " + JSON.stringify(s.checks)}`);
@@ -101,7 +102,7 @@ for (const model of models) {
     if (withBaseline) for (let i = 0; i < repeats; i++) {
       const label = `${model} ${f.id} plain chatbot run ${i + 1}`;
       try {
-        const text = await callGemini({ apiKey, model, parts: [{ text: baselinePrompt(f) }], schema: null, temperature: 1 });
+        const text = await callWithRetry({ apiKey, model, parts: [{ text: baselinePrompt(f) }], schema: null, temperature: 1 }, { sleep, onRetry: (e, n) => log(`${label}: busy, retry ${n}`, true) });
         const c = compareBaseline(text, f, { today });
         base.push({ ok: true, text, cmp: c });
         log(`${label}: missed ${c.missed}, wrong ${c.wrongShown}`);

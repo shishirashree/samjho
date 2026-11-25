@@ -159,7 +159,7 @@ export function buildFollowupPrompt(language, sourceText, question) {
 export class SamjhoError extends Error {
   constructor(kind, message, extra = {}) {
     super(message);
-    this.kind = kind; // "no_key" | "offline" | "bad_key" | "rate_limit" | "model" | "too_big" | "blocked" | "bad_output" | "server"
+    this.kind = kind; // "no_key" | "offline" | "bad_key" | "rate_limit" | "busy" | "model" | "too_big" | "blocked" | "bad_output" | "server"
     Object.assign(this, extra);
   }
 }
@@ -190,6 +190,8 @@ export async function callGemini({ apiKey, model, parts, schema, fetchImpl = fet
       throw new SamjhoError("bad_key", "Your API key was rejected. Check it in Settings.", { detail });
     if (res.status === 404) throw new SamjhoError("model", `The model "${model}" isn't available. Pick another model in Settings.`, { detail });
     if (res.status === 413) throw new SamjhoError("too_big", "The file is too large. Try a smaller photo or fewer pages.", { detail });
+    if ([500, 502, 503, 504].includes(res.status))
+      throw new SamjhoError("busy", "Google's AI is overloaded right now. Please try again in a minute.", { detail, status: res.status });
     throw new SamjhoError("server", `The AI service returned an error (${res.status}). Try again.`, { detail });
   }
   const data = await res.json();
@@ -217,28 +219,49 @@ export function parseJsonLoose(text) {
   }
 }
 
-// Full pipeline: call once, retry once on a garbled answer or a rate limit.
-export async function explainDocument({ apiKey, model, language, input, fetchImpl, today, sleep = defaultSleep }) {
+// Retry temporary failures: a garbled answer once; an overloaded or rate-limited
+// service up to `retries` times, waiting longer each time (4s, then 10s).
+export const RETRY_WAITS = [4000, 10000];
+export async function callWithRetry(opts, { sleep = defaultSleep, onRetry = () => {} } = {}) {
+  let garbled = 0;
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await callGemini(opts);
+    } catch (e) {
+      if (e.kind === "bad_output" && garbled++ < 1) continue;
+      const temporary = e.kind === "busy" || e.kind === "rate_limit";
+      if (!temporary || attempt >= RETRY_WAITS.length) throw e;
+      onRetry(e, attempt + 1);
+      await sleep(RETRY_WAITS[attempt]);
+    }
+  }
+}
+
+// Full pipeline. If the chosen model stays overloaded (or is retired), try the
+// backup models in order. The result says which model answered (`model_used`).
+export async function explainDocument({ apiKey, model, language, input, fetchImpl, today, sleep = defaultSleep, fallbackModels = [], onRetry }) {
   const parts = [{ text: buildPrompt(language, today) }];
   if (input.text) parts.push({ text: "DOCUMENT TEXT:\n" + input.text });
   if (input.inlineData) parts.push({ inline_data: input.inlineData }); // {mime_type, data(base64)}
-  let raw, lastErr;
-  for (let attempt = 0; attempt < 2; attempt++) {
+  const models = [model, ...fallbackModels.filter((m) => m && m !== model)];
+  let raw, used, lastErr;
+  for (const m of models) {
     try {
-      raw = await callGemini({ apiKey, model, parts, schema: RESPONSE_SCHEMA, fetchImpl });
+      raw = await callWithRetry({ apiKey, model: m, parts, schema: RESPONSE_SCHEMA, fetchImpl }, { sleep, onRetry });
+      used = m;
       break;
     } catch (e) {
       lastErr = e;
-      if (e.kind === "bad_output" && attempt === 0) continue;
-      if (e.kind === "rate_limit" && attempt === 0) { await sleep(8000); continue; }
-      throw e;
+      if (!["busy", "rate_limit", "model"].includes(e.kind)) throw e; // other errors won't be fixed by another model
     }
   }
   if (!raw) throw lastErr;
   // For pasted text we KNOW the real document text, so verify against that,
   // not against the AI's own transcription.
   const groundTruth = input.text || raw.source_text || "";
-  return checkResult(normalizeResult(raw), groundTruth, today);
+  const result = checkResult(normalizeResult(raw), groundTruth, today);
+  result.model_used = used;
+  return result;
 }
 
 // ---------------------------------------------------------------------------

@@ -194,3 +194,35 @@ test("the saved list never grows past the limit", () => {
   assert.equal(list.length, 30);
   assert.equal(list[0].sender, "Sender 39");
 });
+
+// ---- Google overloaded (503): wait, retry, then use a backup model ----
+test("503 is reported as 'busy' with a friendly message", async () => {
+  await assert.rejects(callGemini({ model: "m", parts: [], schema: {}, apiKey: "k", fetchImpl: fakeRes(503, {}) }), { kind: "busy" });
+});
+
+test("a brief overload is retried with growing waits", async () => {
+  let calls = 0; const waits = [];
+  const fetchImpl = async () => (++calls <= 2 ? { ok: false, status: 503, json: async () => ({}) } : { ok: true, status: 200, json: async () => geminiBody(SAMPLE_RESULT) });
+  const r = await explainDocument({ apiKey: "k", model: "m", language: "English", input: { text: SAMPLE_TEXT }, fetchImpl, today: "2026-11-24", sleep: async (ms) => waits.push(ms) });
+  assert.equal(calls, 3);
+  assert.deepEqual(waits, [4000, 10000]);
+  assert.equal(r.model_used, "m");
+});
+
+test("if the model stays overloaded, a backup model answers", async () => {
+  const asked = [];
+  const fetchImpl = async (url) => {
+    asked.push(url.match(/models\/([^:]+)/)[1]);
+    return url.includes("main-model") ? { ok: false, status: 503, json: async () => ({}) } : { ok: true, status: 200, json: async () => geminiBody(SAMPLE_RESULT) };
+  };
+  const r = await explainDocument({ apiKey: "k", model: "main-model", fallbackModels: ["backup-model"], language: "English", input: { text: SAMPLE_TEXT }, fetchImpl, today: "2026-11-24", sleep: async () => {} });
+  assert.equal(r.model_used, "backup-model");
+  assert.deepEqual(asked, ["main-model", "main-model", "main-model", "backup-model"]);
+});
+
+test("a wrong key is not retried and does not switch models", async () => {
+  let calls = 0;
+  const fetchImpl = async () => { calls++; return { ok: false, status: 403, json: async () => ({}) }; };
+  await assert.rejects(explainDocument({ apiKey: "k", model: "a", fallbackModels: ["b"], language: "English", input: { text: "x" }, fetchImpl, sleep: async () => {} }), { kind: "bad_key" });
+  assert.equal(calls, 1);
+});

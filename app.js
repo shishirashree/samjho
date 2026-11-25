@@ -2,7 +2,7 @@
 // The thinking/checking lives in core.js.
 import {
   LANGUAGES, MODEL_CHOICES, DEFAULT_MODEL, FOLLOWUP_SCHEMA,
-  explainDocument, callGemini, buildFollowupPrompt, checkResult, normalizeResult,
+  explainDocument, callWithRetry, buildFollowupPrompt, checkResult, normalizeResult,
   quoteStatus, buildIcs, calendarEvents, resultToPlainText, isoToday,
   toSavedLetter, upsertLetter, upcomingItems,
 } from "./core.js";
@@ -26,6 +26,7 @@ function saveLetters(list) {
 let doc = null;        // { kind: "image"|"pdf"|"text", inlineData?, text?, name }
 let lastResult = null;
 let busy = false;
+let loadingLabel = null; // the "Reading your document…" line, so retries can update it
 
 // ---- small DOM helper: never uses innerHTML for AI text (prevents injection) ----
 function el(tag, attrs = {}, ...kids) {
@@ -163,14 +164,19 @@ async function run() {
   $("result").replaceChildren();
   showLoading();
   try {
+    const chosen = store.get("model", DEFAULT_MODEL);
     const result = await explainDocument({
       apiKey,
-      model: store.get("model", DEFAULT_MODEL),
+      model: chosen,
+      fallbackModels: MODEL_CHOICES.filter((m) => m !== chosen).slice(0, 2),
       language: $("lang").value,
       input: doc.kind === "text" ? { text: doc.text } : { inlineData: doc.inlineData },
       today: isoToday(),
+      onRetry: (e, n) => { if (loadingLabel) loadingLabel.textContent = `Google's AI is busy — retrying (${n})…`; },
     });
     setStatus(null);
+    if (result.model_used && result.model_used !== chosen)
+      setStatus("info", `Your chosen model (${chosen}) was overloaded, so a backup model (${result.model_used}) answered.`);
     lastResult = { ...result, _language: $("lang").value, _sample: false, _pasted: doc.kind === "text" };
     renderResult(lastResult);
     if (result.is_document && result.readable) rememberLetter(lastResult, true);
@@ -200,6 +206,7 @@ function setStatus(kind, msg) {
 function showLoading() {
   const steps = ["Reading your document…", "Finding dates, money and things to do…", "Checking every fact against the document…"];
   const label = el("p", {}, steps[0]);
+  loadingLabel = label;
   $("status").replaceChildren(el("div", { class: "card loading" }, el("div", { class: "spinner", "aria-hidden": "true" }), label));
   let i = 0;
   const t = setInterval(() => { if (!busy) return clearInterval(t); i = Math.min(i + 1, steps.length - 1); label.textContent = steps[i]; }, 2500);
@@ -399,11 +406,11 @@ function askCard(r) {
     if (!apiKey) { answer.replaceChildren(el("p", { class: "note" }, "Add your API key in Settings to ask questions.")); return; }
     btn.disabled = true; answer.replaceChildren(el("p", { class: "note" }, "Looking in the document…"));
     try {
-      const res = await callGemini({
+      const res = await callWithRetry({
         apiKey, model: store.get("model", DEFAULT_MODEL),
         parts: [{ text: buildFollowupPrompt(r._language, r.source_text, q) }],
         schema: FOLLOWUP_SCHEMA,
-      });
+      }, { onRetry: (e, n) => answer.replaceChildren(el("p", { class: "note" }, `Google's AI is busy — retrying (${n})…`)) });
       const st = res.found ? quoteStatus(res.quote, r.source_text) : "none";
       answer.replaceChildren(el("div", { style: "margin-top:10px" },
         el("p", { style: "margin:0 0 4px" }, String(res.answer || "")),

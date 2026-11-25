@@ -16,12 +16,13 @@ The rubric rewards showing **how a person checked AI-written work**: what you ch
 | 4 | "My deadlines" list screen | Opened the page on a phone-size screen with 2 saved letters and looked at it | The grouped lists showed as raw text (`[object HTMLHeadingElement]`). The code appended JavaScript arrays where the browser expects elements. | **Changed:** flattened the list before adding it; re-checked the screen and ticking an item |
 | 5 | Saving dates to the list | Looked at the list after saving the sample letter | The letter's *old* due date (already passed when scanned) showed as "Overdue", which is noise | **Changed:** dates already past at scan time are not saved as to-dos; test updated |
 | 6 | Chatbot comparison scorer (`eval/textfacts.mjs`) | Unit tests with sample chat answers in English and Hindi | Works on common date and money formats. It counts a correct total the chatbot added up (e.g. ₹2,390) as "not in the letter" | **Kept**, with a note in the report telling readers to check those cases by hand |
-| 7 | *(you)* Real eval run with your key | Read `eval/results.md`, fill in the "Real error?" column | … | … |
-| 8 | *(you)* Tested on a real letter at home (cover personal numbers) | Compared the app's answer with the paper | … | … |
-| 9 | *(you)* UI change you made yourself | … | … | … |
+| 7 | Error handling for an unavailable AI service | First real evaluation run on the live site (Nov 25, by shishirashree) | Google returned **503 (overloaded)** on the first 5 calls. The app only retried on 429 and gave up after one try, so every call failed | **Changed:** 500/502/503/504 are now treated as temporary. Retries wait 4 s then 10 s, then the app falls back to a backup model and says so. 4 new tests. The evaluation itself never switches models, so its scores stay honest |
+| 8 | *(you)* Real eval run with your key | Read `eval/results.md`, fill in the "Real error?" column | … | … |
+| 9 | *(you)* Tested on a real letter at home (cover personal numbers) | Compared the app's answer with the paper | … | … |
+| 10 | *(you)* UI change you made yourself | … | … | … |
 
 ## Work completed during the hackathon (Nov 21–28, 2026)
 - New project, started Nov 24, 2026. No code existed before the event.
 - Nov 24: first version (explain + fact checker + calendar + read aloud), 18 unit tests, AI evaluation set.
-- Nov 25: "My deadlines" list across letters; plain-chatbot comparison in the evaluation; 26 unit tests; in-browser test runner (`eval.html`) so the evaluation runs on a phone.
+- Nov 25: "My deadlines" list across letters; plain-chatbot comparison in the evaluation; 26 unit tests; in-browser test runner (`eval.html`) so the evaluation runs on a phone; retry + backup model after real 503 errors.
 - *(list your own changes each day, with the date)*

@@ -30,3 +30,10 @@ test("scam scorer counts only answers that call THIS message a scam (run 1 bug)"
   assert.equal(mentionsScam("इसलिए बैंक के नाम से आने वाले किसी भी फर्जी फोन या मैसेज पर अपनी गोपनीय जानकारी न दें।"), false);
   assert.equal(mentionsScam("The bank will never ask for your OTP. Beware of any fake calls."), false);
 });
+
+test("a sentence ending in a month, then a numbered line, is not a date (run 2 bug)", () => {
+  const t = "You missed the deadline (Nov 5) to pay your bill for October. \n2.  **What happens if you don't pay by Nov 30:**";
+  assert.deepEqual(extractDates(t, "2026-11-24"), ["2026-11-05", "2026-11-30"]);
+  assert.deepEqual(extractDates("Meeting on Dec. 12, 2026", "2026-11-24"), ["2026-12-12"]);
+  assert.deepEqual(extractDates("paid in October. 5 people came", "2026-11-24"), []);
+});

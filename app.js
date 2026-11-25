@@ -271,7 +271,7 @@ function renderResult(r) {
       el("ul", { class: "items" }, r.money.map((m) => item(m.label, null, m, el("span", { class: "amount" }, m.amount))))));
   }
 
-  const events = calendarEvents(r);
+  const events = calendarEvents(r, isoToday());
   if (r.dates.length) {
     out.append(el("section", { class: "card" },
       el("h2", {}, "📅 Important dates"),
@@ -314,6 +314,7 @@ function item(text, chip, src, right = null) {
 function dueChip(daysLeft, iso) {
   if (daysLeft === undefined || daysLeft === null) return null;
   const nice = formatDate(iso);
+  if (daysLeft < -60) return el("span", { class: "chip past" }, nice); // old reference date: no countdown
   if (daysLeft < 0) return el("span", { class: "chip past" }, `${nice} · passed ${-daysLeft} day${daysLeft === -1 ? "" : "s"} ago`);
   if (daysLeft === 0) return el("span", { class: "chip soon" }, `${nice} · TODAY`);
   return el("span", { class: "chip " + (daysLeft <= 14 ? "soon" : "later") }, `${nice} · in ${daysLeft} day${daysLeft === 1 ? "" : "s"}`);

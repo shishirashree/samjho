@@ -36,13 +36,17 @@ export function extractDates(text, today) {
   for (const m of t.matchAll(/\b(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})\b/g)) add(+m[3], +m[2], +m[1]); // Indian day/month/year
   const L = "[\\p{L}\\p{M}]+";
   // 30 November 2026 / 30th Nov / 31 दिसंबर 2026
-  for (const m of t.matchAll(new RegExp(`\\b(\\d{1,2})(?:st|nd|rd|th)?\\s+(?:of\\s+)?(${L})\\.?,?(?:\\s+(\\d{4}))?`, "gu"))) {
+  // Spaces only (never a line break) between day, month and year, so a sentence end
+  // like "bill for October.\n2. What happens" is not read as "October 2" (run 2 bug).
+  for (const m of t.matchAll(new RegExp(`\\b(\\d{1,2})(?:st|nd|rd|th)?[ \\t]+(?:of[ \\t]+)?(${L})\\.?,?(?:[ \\t]+(\\d{4}))?`, "gu"))) {
     const mo = monthIndex(m[2]); if (!mo) continue;
     const d = +m[1]; add(m[3] ? +m[3] : guessYear(mo, d, today), mo, d);
   }
   // November 30, 2026 / Dec 12th
-  for (const m of t.matchAll(new RegExp(`(${L})\\.?\\s+(\\d{1,2})(?:st|nd|rd|th)?\\b,?(?:\\s+(\\d{4}))?`, "gu"))) {
+  for (const m of t.matchAll(new RegExp(`(${L})(\\.?)[ \\t]+(\\d{1,2})(?:st|nd|rd|th)?\\b,?(?:[ \\t]+(\\d{4}))?`, "gu"))) {
     const mo = monthIndex(m[1]); if (!mo) continue;
+    if (m[2] && m[1].length > 4) continue; // "October. 2" = end of a sentence; "Dec. 12" = abbreviation, keep
+    m.splice(2, 1); // drop the dot group so m[2]/m[3] are day/year again
     const d = +m[2]; add(m[3] ? +m[3] : guessYear(mo, d, today), mo, d);
   }
   return [...out].sort();

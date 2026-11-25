@@ -78,7 +78,7 @@ test("garbage AI output is normalised instead of crashing", () => {
 
 test("calendar file has one event per deadline with a reminder", () => {
   const r = checkResult(normalizeResult(structuredClone(SAMPLE_RESULT)), SAMPLE_TEXT, "2026-11-24");
-  const ev = calendarEvents(r);
+  const ev = calendarEvents(r, "2026-11-24");
   const ics = buildIcs(ev, new Date("2026-11-24T10:00:00Z"));
   assert.match(ics, /DTSTART;VALUE=DATE:20261130/);
   assert.match(ics, /TRIGGER:-P1D/);
@@ -262,4 +262,11 @@ test("a used-up DAILY quota is not retried, but a backup model is tried", async 
   const r = await explainDocument({ apiKey: "k", model: "tired", fallbackModels: ["fresh"], language: "English", input: { text: SAMPLE_TEXT }, fetchImpl, today: "2026-11-24", sleep: async () => { throw new Error("should not wait"); } });
   assert.deepEqual(asked, ["tired", "fresh"]);
   assert.equal(r.model_used, "fresh");
+});
+
+test("dates already in the past are not put in the calendar (old bill)", () => {
+  const r = checkResult(normalizeResult({ dates: [{ label: "Bill date", date: "2007-06-02", quote: "02/06/2007" }] }), "Date 02/06/2007", "2026-11-25");
+  assert.deepEqual(calendarEvents(r, "2026-11-25"), []);
+  const s = checkResult(normalizeResult(structuredClone(SAMPLE_RESULT)), SAMPLE_TEXT, "2026-11-24");
+  assert.ok(calendarEvents(s, "2026-11-24").every((e) => e.date >= "2026-11-24"));
 });

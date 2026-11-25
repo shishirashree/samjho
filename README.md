@@ -38,7 +38,7 @@ No build step and nothing to install. It is three plain files: `index.html`, `ap
 
 ## Tests
 ```bash
-npm test                      # 35 offline unit tests (fact checker, dates, calendar, deadlines list, retries, daily-limit handling and backup model)
+npm test                      # 37 offline unit tests (fact checker, dates, calendar, deadlines list, retries, daily-limit handling and backup model)
 GEMINI_API_KEY=... npm run eval -- --models gemini-3.8-flash,gemini-3.1-flash-lite --repeats 2
 ```
 **No laptop?** Open `eval.html` on the live site (link at the bottom of the app) and tap **Run the test**. It runs the same evaluation in your browser and lets you copy or download the reports.

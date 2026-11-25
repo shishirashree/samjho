@@ -459,11 +459,13 @@ export function buildIcs(events, now = new Date()) {
   return lines.join("\r\n");
 }
 
-export function calendarEvents(r) {
+// Only dates that are still ahead go into the calendar. A 2007 bill date doesn't
+// need a reminder (found when testing a real restaurant bill, Nov 25).
+export function calendarEvents(r, today = isoToday()) {
   const seen = new Set();
   const out = [];
   const add = (date, title, quote) => {
-    if (!isValidIsoDate(date) || seen.has(date + title)) return;
+    if (!isValidIsoDate(date) || date < today || seen.has(date + title)) return;
     seen.add(date + title);
     out.push({ date, title: title + (r.sender ? ` — ${r.sender}` : ""), description: `From the document: "${quote}"` });
   };

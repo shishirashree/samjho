@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Samjho — understand any letter, in your language</title>
+<meta name="description" content="Take a photo of a confusing letter, bill or notice. Samjho explains it in simple words in your language, lists what to do and by when, and checks every fact against the document.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%231f5f4a'/><text x='32' y='44' font-size='34' text-anchor='middle' fill='%23fff7e8' font-family='Georgia,serif'>स</text></svg>">
+<style>
+  :root {
+    --paper: #fbf7ef;
+    --card: #ffffff;
+    --ink: #1d2320;
+    --muted: #5d6762;
+    --line: #e6dfd1;
+    --brand: #1f5f4a;
+    --brand-ink: #fff7e8;
+    --brand-soft: #e3efe9;
+    --ok: #1d7a4c;
+    --ok-soft: #e2f4ea;
+    --warn: #9a5b00;
+    --warn-soft: #fff1d6;
+    --bad: #b3261e;
+    --bad-soft: #fde7e4;
+    --radius: 16px;
+    --shadow: 0 1px 2px rgba(30,40,35,.06), 0 4px 16px rgba(30,40,35,.06);
+    font-size: 17px;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--paper); color: var(--ink);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", "Noto Sans Devanagari", sans-serif; line-height: 1.5; }
+  main { max-width: 680px; margin: 0 auto; padding: 16px 16px 64px; }
+  header.top { display: flex; align-items: center; justify-content: space-between; padding: 8px 0 4px; }
+  .logo { display: flex; align-items: center; gap: 10px; font-family: Georgia, "Times New Roman", serif; font-size: 1.6rem; font-weight: 700; color: var(--brand); }
+  .logo .mark { width: 40px; height: 40px; border-radius: 11px; background: var(--brand); color: var(--brand-ink); display: grid; place-items: center; font-size: 1.4rem; }
+  .tagline { margin: 2px 0 18px; color: var(--muted); }
+  .iconbtn { border: 1px solid var(--line); background: var(--card); border-radius: 12px; min-width: 44px; min-height: 44px; font-size: 1.1rem; cursor: pointer; color: var(--ink); }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px; margin: 14px 0; box-shadow: var(--shadow); }
+  .card h2 { margin: 0 0 10px; font-size: 1.05rem; display: flex; align-items: center; gap: 8px; }
+  .card h2 .n { background: var(--brand-soft); color: var(--brand); border-radius: 999px; padding: 0 9px; font-size: .85rem; }
+  .pickers { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .pick { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 84px;
+    border: 2px dashed var(--line); border-radius: 14px; background: #fffdf8; cursor: pointer; font: inherit; color: var(--ink); text-align: center; padding: 8px; }
+  .pick:hover, .pick:focus-visible { border-color: var(--brand); outline: none; }
+  .pick .ico { font-size: 1.6rem; }
+  .pick small { color: var(--muted); font-size: .8rem; }
+  textarea { width: 100%; min-height: 140px; border: 1px solid var(--line); border-radius: 12px; padding: 12px; font: inherit; background: #fffdf8; resize: vertical; }
+  .preview { display: flex; align-items: center; gap: 12px; margin-top: 12px; padding: 10px; border-radius: 12px; background: var(--brand-soft); }
+  .preview img { width: 64px; height: 64px; object-fit: cover; border-radius: 8px; }
+  .preview .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  label.lang { display: flex; flex-direction: column; gap: 4px; font-weight: 600; flex: 1; min-width: 180px; }
+  select, input[type=password], input[type=text] { font: inherit; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: #fffdf8; min-height: 44px; width: 100%; }
+  .primary { width: 100%; margin-top: 14px; min-height: 56px; border: 0; border-radius: 14px; background: var(--brand); color: var(--brand-ink); font: inherit; font-size: 1.1rem; font-weight: 700; cursor: pointer; }
+  .primary:disabled { opacity: .5; cursor: not-allowed; }
+  .ghost { border: 1px solid var(--line); background: var(--card); border-radius: 12px; min-height: 44px; padding: 0 14px; font: inherit; cursor: pointer; color: var(--ink); }
+  .linkish { background: none; border: 0; color: var(--brand); text-decoration: underline; font: inherit; cursor: pointer; padding: 8px 0; min-height: 44px; }
+  .note { color: var(--muted); font-size: .88rem; margin: 10px 0 0; }
+  .banner { border-radius: 14px; padding: 14px 16px; margin: 14px 0; font-weight: 600; display: flex; gap: 10px; align-items: flex-start; }
+  .banner.high { background: var(--bad-soft); color: var(--bad); }
+  .banner.medium { background: var(--warn-soft); color: var(--warn); }
+  .banner.low, .banner.none { background: var(--ok-soft); color: var(--ok); }
+  .banner.info { background: var(--brand-soft); color: var(--brand); }
+  .banner.error { background: var(--bad-soft); color: var(--bad); }
+  .trust { display: flex; align-items: center; gap: 10px; font-size: .92rem; color: var(--muted); margin: 6px 2px; }
+  .trust .bar { flex: 1; height: 8px; background: var(--warn-soft); border-radius: 99px; overflow: hidden; }
+  .trust .bar i { display: block; height: 100%; background: var(--ok); }
+  .doctype { font-size: .85rem; font-weight: 700; letter-spacing: .03em; text-transform: uppercase; color: var(--brand); }
+  .sender { color: var(--muted); font-size: .92rem; }
+  .summary { font-size: 1.12rem; margin: 8px 0 12px; }
+  ul.items { list-style: none; margin: 0; padding: 0; }
+  ul.items li { border-top: 1px solid var(--line); padding: 12px 0; }
+  ul.items li:first-child { border-top: 0; padding-top: 2px; }
+  .itemhead { display: flex; gap: 10px; align-items: flex-start; }
+  .itemhead .main { flex: 1; }
+  .amount { font-weight: 800; font-size: 1.15rem; white-space: nowrap; }
+  .chip { display: inline-block; font-size: .8rem; font-weight: 700; padding: 2px 9px; border-radius: 99px; margin-top: 4px; }
+  .chip.soon { background: var(--bad-soft); color: var(--bad); }
+  .chip.later { background: var(--brand-soft); color: var(--brand); }
+  .chip.past { background: #eee; color: #555; }
+  .badge { flex: none; font-size: .78rem; font-weight: 700; border-radius: 99px; padding: 3px 9px; white-space: nowrap; }
+  .badge.ok { background: var(--ok-soft); color: var(--ok); }
+  .badge.flag { background: var(--warn-soft); color: var(--warn); }
+  details.src { margin-top: 6px; font-size: .88rem; color: var(--muted); }
+  details.src summary { cursor: pointer; min-height: 32px; display: flex; align-items: center; }
+  details.src blockquote { margin: 4px 0 0; padding: 8px 12px; background: #fffaf0; border-left: 3px solid var(--line); border-radius: 6px; color: var(--ink); }
+  .dlh { font-size: .85rem; margin: 12px 0 2px; text-transform: none; }
+  .dlh.bad { color: var(--bad); } .dlh.soon { color: var(--warn); } .dlh.later { color: var(--brand); }
+  li.dl { display: flex; gap: 12px; align-items: flex-start; }
+  li.dl input[type=checkbox] { width: 24px; height: 24px; margin-top: 2px; accent-color: var(--brand); flex: none; }
+  li.dl .main { flex: 1; }
+  li.dl label { cursor: pointer; }
+  .card.scam { border-color: #f2b8b2; background: #fff8f7; }
+  .card.scam h2 { color: var(--bad); }
+  .tools { display: flex; gap: 8px; flex-wrap: wrap; }
+  .ask { display: flex; gap: 8px; }
+  .ask input { flex: 1; }
+  pre.orig { white-space: pre-wrap; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: .85rem; background: #fffdf8; border: 1px solid var(--line); border-radius: 10px; padding: 12px; max-height: 320px; overflow: auto; }
+  .loading { text-align: center; padding: 28px 10px; }
+  .spinner { width: 42px; height: 42px; border: 4px solid var(--brand-soft); border-top-color: var(--brand); border-radius: 50%; margin: 0 auto 12px; animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  dialog { border: 0; border-radius: 18px; padding: 0; width: min(520px, 94vw); box-shadow: 0 20px 60px rgba(0,0,0,.25); }
+  dialog::backdrop { background: rgba(20,25,22,.45); }
+  dialog .in { padding: 20px; }
+  dialog h3 { margin: 0 0 6px; }
+  .field { margin: 14px 0; display: flex; flex-direction: column; gap: 6px; font-weight: 600; }
+  .field small { font-weight: 400; color: var(--muted); }
+  .hidden { display: none !important; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  footer { color: var(--muted); font-size: .82rem; text-align: center; margin-top: 28px; }
+  :focus-visible { outline: 3px solid #7fb8a3; outline-offset: 2px; }
+  @media (max-width: 420px) { .pick { min-height: 76px; } .pick small { display: none; } }
+</style>
+</head>
+<body>
+<main>
+  <header class="top">
+    <div class="logo"><span class="mark" aria-hidden="true">स</span> Samjho</div>
+    <button class="iconbtn" id="openSettings" aria-label="Settings">⚙️</button>
+  </header>
+  <p class="tagline">Confusing letter, bill or notice? Take a photo. Get what it means, what to do and by when — in your language.</p>
+
+  <section id="deadlines" class="card hidden" aria-label="My deadlines"></section>
+
+  <section id="inputCard" class="card" aria-labelledby="h-input">
+    <h2 id="h-input"><span class="n">1</span> Add your document</h2>
+    <div class="pickers">
+      <button class="pick" id="btnCamera" type="button"><span class="ico" aria-hidden="true">📷</span>Take photo<small>use camera</small></button>
+      <button class="pick" id="btnFile" type="button"><span class="ico" aria-hidden="true">📄</span>Upload<small>image or PDF</small></button>
+      <button class="pick" id="btnText" type="button"><span class="ico" aria-hidden="true">✍️</span>Paste text<small>SMS, email</small></button>
+    </div>
+    <input type="file" id="camInput" accept="image/*" capture="environment" class="sr" tabindex="-1">
+    <input type="file" id="fileInput" accept="image/*,application/pdf" class="sr" tabindex="-1">
+    <div id="textWrap" class="hidden" style="margin-top:12px">
+      <label for="docText" class="sr">Document text</label>
+      <textarea id="docText" placeholder="Paste the message, email or letter text here…"></textarea>
+    </div>
+    <div id="preview" class="preview hidden">
+      <img id="previewImg" alt="" class="hidden">
+      <span id="previewIco" aria-hidden="true" class="hidden" style="font-size:2rem">📄</span>
+      <span class="name" id="previewName"></span>
+      <button class="ghost" id="clearDoc" type="button">Remove</button>
+    </div>
+
+    <h2 style="margin-top:18px"><span class="n">2</span> Explain it in</h2>
+    <div class="row">
+      <label class="lang"><span class="sr">Language</span>
+        <select id="lang"></select>
+      </label>
+    </div>
+    <button class="primary" id="go" disabled>Explain this</button>
+    <div class="row" style="justify-content:space-between">
+      <button class="linkish" id="trySample" type="button">No document handy? Try a sample</button>
+    </div>
+    <p class="note">🔒 Your document is sent to Google's Gemini AI to be read. Samjho keeps your explained letters only on this device (My deadlines), never on a server. Cover Aadhaar, bank or card numbers before taking a photo.</p>
+  </section>
+
+  <div id="status" role="status" aria-live="polite"></div>
+  <section id="result" aria-live="polite"></section>
+
+  <footer>Samjho can make mistakes. Items marked ⚠ could not be matched to the document — check them yourself. Not legal or financial advice.<br><a href="eval.html" style="color:inherit">How accurate is Samjho? Run the AI test</a></footer>
+</main>
+
+<dialog id="settings" aria-labelledby="h-settings">
+  <form method="dialog" class="in">
+    <h3 id="h-settings">Settings</h3>
+    <p class="note" style="margin-top:0">Samjho runs on Google's free Gemini API. Your key stays in this browser only.</p>
+    <div class="field">
+      <label for="apiKey">Gemini API key</label>
+      <input type="password" id="apiKey" autocomplete="off" placeholder="Paste key here">
+      <small>Get a free key at <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a> (no card needed).</small>
+    </div>
+    <div class="field">
+      <label for="model">AI model</label>
+      <select id="model"></select>
+      <small>If you see "model isn't available", pick another one.</small>
+    </div>
+    <div class="row" style="justify-content:space-between;margin-top:18px">
+      <button class="ghost" id="forgetKey" type="button">Forget key</button>
+      <button class="ghost" value="close" style="background:var(--brand);color:var(--brand-ink);border:0">Save</button>
+    </div>
+  </form>
+</dialog>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>

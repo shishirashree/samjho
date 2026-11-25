@@ -1,0 +1,196 @@
+// Run with:  node --test tests/
+// These tests check the parts of Samjho that do NOT need the internet.
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import {
+  quoteStatus, amountMatchesQuote, dateMatchesQuote, isValidIsoDate, checkResult, normalizeResult,
+  buildIcs, calendarEvents, parseJsonLoose, callGemini, explainDocument, daysBetween, asciiDigits,
+} from "../core.js";
+import { SAMPLE_TEXT, SAMPLE_RESULT } from "../sample.js";
+
+test("quote found word-for-word, ignoring punctuation and case", () => {
+  assert.equal(quoteStatus("please PAY the outstanding amount on or before 30/11/2026", SAMPLE_TEXT), "verified");
+});
+
+test("quote mostly present counts as partial", () => {
+  assert.equal(quoteStatus("Please pay the outstanding amount on or before 30/11/2026 to avoid power cut", SAMPLE_TEXT), "partial");
+});
+
+test("invented quote is unverified", () => {
+  assert.equal(quoteStatus("A fine of Rs. 5000 will be charged by the court", SAMPLE_TEXT), "unverified");
+  assert.equal(quoteStatus("", SAMPLE_TEXT), "unverified");
+});
+
+test("amount must appear inside the quote", () => {
+  assert.equal(amountMatchesQuote("Rs. 2,340.00", "your bill of Rs. 2,340.00 remains unpaid"), true);
+  assert.equal(amountMatchesQuote("₹2340", "your bill of Rs. 2,340.00 remains unpaid"), true);
+  assert.equal(amountMatchesQuote("Rs. 3,240", "your bill of Rs. 2,340.00 remains unpaid"), false);
+  assert.equal(amountMatchesQuote("₹४,२००", "कुल देय राशि ₹4,200 है"), true);
+});
+
+test("dates in many formats match the quote", () => {
+  assert.equal(dateMatchesQuote("2026-11-30", "on or before 30/11/2026"), true);
+  assert.equal(dateMatchesQuote("2026-12-12", "Saturday, 12 December 2026"), true);
+  assert.equal(dateMatchesQuote("2026-12-12", "on the 12th of Dec"), true);
+  assert.equal(dateMatchesQuote("2026-12-31", "31 दिसंबर 2026 तक जमा करें"), true);
+  assert.equal(dateMatchesQuote("2026-12-31", "३१ दिसम्बर २०२६ तक"), true);
+  assert.equal(dateMatchesQuote("2026-11-30", "on or before 03/11/2026"), false);
+});
+
+test("Indian digits convert to 0-9", () => {
+  assert.equal(asciiDigits("४२००"), "4200");
+  assert.equal(asciiDigits("௧௨"), "12");
+});
+
+test("impossible dates are rejected", () => {
+  assert.equal(isValidIsoDate("2026-02-30"), false);
+  assert.equal(isValidIsoDate("2026-11-30"), true);
+  assert.equal(isValidIsoDate("30/11/2026"), false);
+});
+
+test("the hand-made sample passes every check", () => {
+  const r = checkResult(normalizeResult(structuredClone(SAMPLE_RESULT)), SAMPLE_TEXT, "2026-11-24");
+  assert.equal(r.stats.flagged, 0, JSON.stringify(r, null, 1));
+  assert.equal(r.actions[0].daysLeft, 6);
+});
+
+test("a hallucinated amount gets flagged", () => {
+  const bad = structuredClone(SAMPLE_RESULT);
+  bad.money[0].amount = "Rs. 3,240.00"; // AI misread the number
+  const r = checkResult(normalizeResult(bad), SAMPLE_TEXT, "2026-11-24");
+  assert.equal(r.money[0].check.ok, false);
+  assert.equal(r.stats.flagged, 1);
+});
+
+test("a hallucinated deadline gets flagged", () => {
+  const bad = structuredClone(SAMPLE_RESULT);
+  bad.actions[0].deadline = "2026-12-03";
+  const r = checkResult(normalizeResult(bad), SAMPLE_TEXT, "2026-11-24");
+  assert.equal(r.actions[0].check.ok, false);
+});
+
+test("garbage AI output is normalised instead of crashing", () => {
+  const r = normalizeResult({ urgency: "extreme", actions: "nope", money: [{ amount: 5 }] });
+  assert.equal(r.urgency, "low");
+  assert.deepEqual(r.actions, []);
+  assert.equal(r.money[0].amount, "5");
+});
+
+test("calendar file has one event per deadline with a reminder", () => {
+  const r = checkResult(normalizeResult(structuredClone(SAMPLE_RESULT)), SAMPLE_TEXT, "2026-11-24");
+  const ev = calendarEvents(r);
+  const ics = buildIcs(ev, new Date("2026-11-24T10:00:00Z"));
+  assert.match(ics, /DTSTART;VALUE=DATE:20261130/);
+  assert.match(ics, /TRIGGER:-P1D/);
+  assert.equal((ics.match(/BEGIN:VEVENT/g) || []).length, ev.length);
+  assert.ok(ev.length >= 2);
+});
+
+test("JSON wrapped in code fences still parses", () => {
+  assert.deepEqual(parseJsonLoose('```json\n{"a":1}\n```'), { a: 1 });
+  assert.deepEqual(parseJsonLoose('Sure! {"a":2} hope this helps'), { a: 2 });
+  assert.throws(() => parseJsonLoose("not json"), { kind: "bad_output" });
+});
+
+test("daysBetween", () => {
+  assert.equal(daysBetween("2026-11-24", "2026-11-30"), 6);
+  assert.equal(daysBetween("2026-11-24", "2026-11-05"), -19);
+});
+
+// ---- network failures, simulated with a fake fetch ----
+const fakeRes = (status, body) => async () => ({ ok: status < 300, status, json: async () => body });
+const geminiBody = (obj) => ({ candidates: [{ content: { parts: [{ text: JSON.stringify(obj) }] } }] });
+
+test("missing key, bad key, rate limit, unknown model, offline", async () => {
+  const base = { model: "m", parts: [{ text: "x" }], schema: {} };
+  await assert.rejects(callGemini({ ...base, apiKey: "" }), { kind: "no_key" });
+  await assert.rejects(callGemini({ ...base, apiKey: "k", fetchImpl: fakeRes(403, {}) }), { kind: "bad_key" });
+  await assert.rejects(callGemini({ ...base, apiKey: "k", fetchImpl: fakeRes(400, { error: { message: "API key not valid" } }) }), { kind: "bad_key" });
+  await assert.rejects(callGemini({ ...base, apiKey: "k", fetchImpl: fakeRes(429, {}) }), { kind: "rate_limit" });
+  await assert.rejects(callGemini({ ...base, apiKey: "k", fetchImpl: fakeRes(404, {}) }), { kind: "model" });
+  await assert.rejects(callGemini({ ...base, apiKey: "k", fetchImpl: async () => { throw new TypeError("fetch failed"); } }), { kind: "offline" });
+  await assert.rejects(callGemini({ ...base, apiKey: "k", fetchImpl: fakeRes(200, { promptFeedback: { blockReason: "SAFETY" } }) }), { kind: "blocked" });
+});
+
+test("explainDocument retries once after a garbled answer", async () => {
+  let calls = 0;
+  const fetchImpl = async () => {
+    calls++;
+    const body = calls === 1 ? { candidates: [{ content: { parts: [{ text: "oops not json" }] } }] } : geminiBody(SAMPLE_RESULT);
+    return { ok: true, status: 200, json: async () => body };
+  };
+  const r = await explainDocument({ apiKey: "k", model: "m", language: "English", input: { text: SAMPLE_TEXT }, fetchImpl, today: "2026-11-24" });
+  assert.equal(calls, 2);
+  assert.equal(r.stats.flagged, 0);
+});
+
+test("explainDocument waits and retries once after a rate limit", async () => {
+  let calls = 0, slept = 0;
+  const fetchImpl = async () => {
+    calls++;
+    return calls === 1 ? { ok: false, status: 429, json: async () => ({}) } : { ok: true, status: 200, json: async () => geminiBody(SAMPLE_RESULT) };
+  };
+  await explainDocument({ apiKey: "k", model: "m", language: "English", input: { text: SAMPLE_TEXT }, fetchImpl, today: "2026-11-24", sleep: async (ms) => { slept = ms; } });
+  assert.equal(calls, 2);
+  assert.ok(slept > 0);
+});
+
+test("pasted text is verified against the real text, not the AI's copy", async () => {
+  const lying = structuredClone(SAMPLE_RESULT);
+  lying.source_text = "fake text that includes A fine of Rs. 9999";
+  lying.warnings.push({ text: "You will be fined", quote: "A fine of Rs. 9999" });
+  const fetchImpl = async () => ({ ok: true, status: 200, json: async () => geminiBody(lying) });
+  const r = await explainDocument({ apiKey: "k", model: "m", language: "English", input: { text: SAMPLE_TEXT }, fetchImpl, today: "2026-11-24" });
+  assert.equal(r.warnings.at(-1).check.ok, false);
+});
+
+// ---- My deadlines ----
+import { toSavedLetter, upsertLetter, upcomingItems } from "../core.js";
+const checkedSample = () => checkResult(normalizeResult(structuredClone(SAMPLE_RESULT)), SAMPLE_TEXT, "2026-11-24");
+
+test("saved letter keeps one item per deadline day", () => {
+  const l = toSavedLetter(checkedSample(), { id: "x", today: "2026-11-24" });
+  // 30 Nov appears as an action AND a date -> one item; 5 Nov had already passed -> not a to-do
+  assert.deepEqual(l.items.map((i) => i.date), ["2026-11-30"]);
+  assert.ok(l.items.every((i) => i.ok));
+});
+
+test("scanning the same letter twice updates it and keeps ticks", () => {
+  let list = [];
+  const first = toSavedLetter(checkedSample(), { id: "one" });
+  ({ list } = upsertLetter(list, first));
+  list[0].done = { a0: true };
+  const again = toSavedLetter(checkedSample(), { id: "two" });
+  const res = upsertLetter(list, again);
+  assert.equal(res.replaced, true);
+  assert.equal(res.list.length, 1);
+  assert.equal(res.list[0].id, "one");
+  assert.equal(res.list[0].done.a0, true);
+});
+
+test("upcoming items are grouped into overdue / this week / later", () => {
+  const l = toSavedLetter(checkedSample(), { id: "one", today: "2026-11-01" }); // scanned before 5 Nov
+  const school = { id: "two", sender: "School", doc_type: "Circular", items: [{ key: "a0", date: "2026-12-12", title: "Parent meeting", ok: true }], done: {} };
+  const g = upcomingItems([l, school], "2026-11-24");
+  assert.deepEqual(g.overdue.map((x) => x.date), ["2026-11-05"]);
+  assert.deepEqual(g.week.map((x) => x.date), ["2026-11-30"]);
+  assert.deepEqual(g.later.map((x) => x.date), ["2026-12-12"]);
+});
+
+test("ticked items disappear and very old overdue items are dropped", () => {
+  const l = toSavedLetter(checkedSample(), { id: "one", today: "2026-11-01" });
+  l.done = { a0: true };
+  const g = upcomingItems([l], "2027-03-01");
+  assert.equal(g.doneCount, 1);
+  assert.equal(g.overdue.length, 0); // 5 Nov is >60 days old by March
+});
+
+test("the saved list never grows past the limit", () => {
+  let list = [];
+  for (let i = 0; i < 40; i++) {
+    const r = checkedSample(); r.sender = "Sender " + i;
+    ({ list } = upsertLetter(list, toSavedLetter(r, { id: "id" + i })));
+  }
+  assert.equal(list.length, 30);
+  assert.equal(list[0].sender, "Sender 39");
+});

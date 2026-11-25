@@ -1,0 +1,103 @@
+[
+  {
+    "id": "E1",
+    "name": "Electricity disconnection notice",
+    "difficulty": "ordinary",
+    "language": "English",
+    "text": "LAKEVIEW POWER SUPPLY CO.  (fictional sample)\nNOTICE OF DISCONNECTION\nConsumer No: 1100234567\nDate: 18/11/2026\n\nDear Consumer,\nOur records show that your electricity bill of Rs. 2,340.00 for the month of October 2026 remains unpaid. The due date was 05/11/2026.\nPlease pay the outstanding amount on or before 30/11/2026 to avoid disconnection of supply. A late payment surcharge of Rs. 50 will be added to your next bill.\nIf supply is disconnected, a reconnection fee of Rs. 150 will be charged.\nYou can pay at any Lakeview service centre or through the official Lakeview app. Lakeview staff will never ask for your OTP or bank PIN.\nIf you have already paid, please ignore this notice.\n\nAssistant Engineer, Ward 7 Office",
+    "expect": {
+      "amounts": ["2340", "50", "150"],
+      "dates": ["2026-11-30"],
+      "allowed_dates": ["2026-11-30", "2026-11-05", "2026-11-18"],
+      "scam": false,
+      "urgency": ["high"]
+    }
+  },
+  {
+    "id": "E2",
+    "name": "School circular: fees + parent meeting",
+    "difficulty": "ordinary",
+    "language": "English",
+    "text": "GREENFIELD PUBLIC SCHOOL (fictional)\nCircular No. 47/2026-27            Date: 20 November 2026\n\nDear Parents,\n1. The Parent-Teacher Meeting for Classes VI to X will be held on Saturday, 12 December 2026, from 9:00 AM to 12:00 PM. Attendance of at least one parent is compulsory.\n2. Term 2 fees of ₹8,500 must be paid by 10 December 2026 through the school fee portal or at the school office. A late fee of ₹200 per week will be charged after the due date.\n3. Students must bring their signed report card on the day of the meeting.\n\nPrincipal",
+    "expect": {
+      "amounts": ["8500", "200"],
+      "dates": ["2026-12-12", "2026-12-10"],
+      "allowed_dates": ["2026-12-12", "2026-12-10", "2026-11-20"],
+      "scam": false,
+      "urgency": ["medium", "high"]
+    }
+  },
+  {
+    "id": "E3",
+    "name": "Scam SMS pretending to be the power company",
+    "difficulty": "demanding",
+    "language": "English",
+    "text": "Dear Costumer, Your Electricity power will be disconnected tonight at 9.30 pm from electricity office because your previous month bill was not update. Please immediately contact with our electricity officer 90000 00000 and share the OTP you receive to update your bill. Thank you",
+    "expect": {
+      "amounts": [],
+      "dates": [],
+      "allowed_dates": [],
+      "scam": true,
+      "urgency": ["high", "medium"]
+    }
+  },
+  {
+    "id": "E4",
+    "name": "Hindi property-tax notice, explained in English",
+    "difficulty": "demanding",
+    "language": "English",
+    "text": "नगर निगम, सूर्यनगर (काल्पनिक)\nसंपत्ति कर मांग पत्र\nदिनांक: 15 नवंबर 2026\n\nप्रिय करदाता,\nवित्तीय वर्ष 2026-27 के लिए आपकी संपत्ति पर कुल देय संपत्ति कर ₹4,200 है। कृपया यह राशि 31 दिसंबर 2026 तक जमा करें। निर्धारित तिथि के बाद भुगतान करने पर 2% प्रति माह की दर से ब्याज लगेगा।\nभुगतान नगर निगम कार्यालय या आधिकारिक वेबसाइट पर किया जा सकता है।\n\nकर अधीक्षक",
+    "expect": {
+      "amounts": ["4200"],
+      "dates": ["2026-12-31"],
+      "allowed_dates": ["2026-12-31", "2026-11-15"],
+      "scam": false,
+      "urgency": ["medium", "high", "low"]
+    }
+  },
+  {
+    "id": "E5",
+    "name": "Bank letter, explained in Hindi",
+    "difficulty": "ordinary",
+    "language": "Hindi",
+    "text": "RIVERSIDE COOPERATIVE BANK (fictional)\nDate: 22-11-2026\n\nDear Customer,\nAs per regulatory guidelines, your KYC (Know Your Customer) details are due for periodic update. Please visit your home branch with a valid photo ID and address proof on or before 15-01-2027. If KYC is not updated by this date, transactions in your savings account may be restricted.\nThe bank will never ask for your password, PIN or OTP over phone, SMS or email.\n\nBranch Manager",
+    "expect": {
+      "amounts": [],
+      "dates": ["2027-01-15"],
+      "allowed_dates": ["2027-01-15", "2026-11-22"],
+      "scam": false,
+      "urgency": ["medium", "low", "high"],
+      "summary_script": "devanagari"
+    }
+  },
+  {
+    "id": "E6",
+    "name": "Vague landlord message (no exact date)",
+    "difficulty": "demanding",
+    "language": "English",
+    "text": "Hi, this is Mr. Rao, your landlord. Rent is going up from next month, new rent will be 14000. Also please get the water purifier serviced sometime soon, its making noise. Let me know.",
+    "expect": {
+      "amounts": ["14000"],
+      "dates": [],
+      "allowed_dates": [],
+      "scam": false,
+      "urgency": ["low", "medium", "none"],
+      "unclear_nonempty": true
+    }
+  },
+  {
+    "id": "E7",
+    "name": "Not a document (random chat)",
+    "difficulty": "demanding",
+    "language": "English",
+    "text": "lol yes I saw that match yesterday, crazy finish. are we still playing on sunday?",
+    "expect": {
+      "amounts": [],
+      "dates": [],
+      "allowed_dates": [],
+      "scam": false,
+      "urgency": ["none", "low"],
+      "max_actions": 1
+    }
+  }
+]

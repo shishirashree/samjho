@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Samjho — AI test run</title>
+<style>
+  :root { --paper:#fbf7ef; --card:#fff; --ink:#1d2320; --muted:#5d6762; --line:#e6dfd1; --brand:#1f5f4a; --brand-ink:#fff7e8; --brand-soft:#e3efe9; --bad:#b3261e; font-size:17px; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--paper); color:var(--ink); font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans",sans-serif; line-height:1.5; }
+  main { max-width:760px; margin:0 auto; padding:16px 16px 64px; }
+  h1 { font-family:Georgia,serif; color:var(--brand); margin:8px 0 4px; font-size:1.6rem; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:16px; padding:18px; margin:14px 0; }
+  label { display:flex; flex-direction:column; gap:6px; font-weight:600; margin:12px 0; }
+  label.check { flex-direction:row; align-items:center; gap:10px; font-weight:400; }
+  input[type=password], select { font:inherit; padding:10px 12px; border:1px solid var(--line); border-radius:12px; min-height:44px; background:#fffdf8; }
+  input[type=checkbox] { width:22px; height:22px; accent-color:var(--brand); }
+  button { font:inherit; min-height:48px; border-radius:12px; padding:0 16px; cursor:pointer; border:1px solid var(--line); background:var(--card); color:var(--ink); }
+  button.primary { background:var(--brand); color:var(--brand-ink); border:0; font-weight:700; width:100%; min-height:56px; }
+  button:disabled { opacity:.5; }
+  .row { display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
+  .note { color:var(--muted); font-size:.88rem; }
+  .bar { height:10px; background:var(--brand-soft); border-radius:99px; overflow:hidden; margin:10px 0; }
+  .bar i { display:block; height:100%; width:0; background:var(--brand); transition:width .3s; }
+  pre { white-space:pre-wrap; word-break:break-word; font:.8rem/1.45 ui-monospace,Menlo,Consolas,monospace; background:#fffdf8; border:1px solid var(--line); border-radius:10px; padding:12px; max-height:360px; overflow:auto; }
+  .err { color:var(--bad); font-weight:600; }
+  .hidden { display:none !important; }
+</style>
+</head>
+<body>
+<main>
+  <a href="./">← Back to Samjho</a>
+  <h1>AI test run</h1>
+  <p>This page sends 7 <b>fictional</b> test letters to the AI. It checks Samjho's answers against the correct answers, and compares them with a plain chatbot answer. It takes about 5 minutes. Keep this tab open and the screen on.</p>
+
+  <section class="card">
+    <label>Gemini API key
+      <input type="password" id="key" autocomplete="off" placeholder="Uses the key saved in Samjho if you leave this empty">
+    </label>
+    <label>Main model
+      <select id="model"></select>
+    </label>
+    <label class="check"><input type="checkbox" id="second"><span>Also test a lighter model (<b id="secondName"></b>) for comparison. This doubles the time.</span></label>
+    <label class="check"><input type="checkbox" id="baseline" checked><span>Compare with a plain chatbot answer</span></label>
+    <label class="check"><input type="checkbox" id="twice" checked><span>Run every letter twice (repeat check)</span></label>
+    <button class="primary" id="run">▶ Run the test</button>
+    <p class="note">Uses your free Gemini quota. The key is only used in this browser.</p>
+  </section>
+
+  <section class="card hidden" id="progressCard">
+    <div id="stage">Starting…</div>
+    <div class="bar"><i id="bar"></i></div>
+    <div class="row"><button id="stop">Stop after this letter</button></div>
+    <pre id="log"></pre>
+  </section>
+
+  <section class="card hidden" id="doneCard">
+    <h2 style="margin-top:0">✅ Done</h2>
+    <p>Copy both reports and paste them into your chat with Claude, or download them for your GitHub repo (<code>eval/results.md</code>, <code>eval/baseline-answers.md</code>).</p>
+    <div class="row">
+      <button id="copyAll">📋 Copy everything</button>
+      <button id="dlResults">⬇ results.md</button>
+      <button id="dlBaseline">⬇ baseline-answers.md</button>
+    </div>
+    <p id="copied" class="note"></p>
+    <pre id="report"></pre>
+  </section>
+</main>
+<script type="module">
+import { MODEL_CHOICES, DEFAULT_MODEL, isoToday } from "./core.js";
+import { runEvaluation } from "./eval/evaluate.mjs";
+
+const $ = (id) => document.getElementById(id);
+const saved = (k, d = "") => { try { return localStorage.getItem("samjho." + k) ?? d; } catch { return d; } };
+for (const m of MODEL_CHOICES) $("model").append(new Option(m, m));
+$("model").value = saved("model", DEFAULT_MODEL);
+const lighter = () => MODEL_CHOICES.find((m) => m.includes("lite") && m !== $("model").value) || MODEL_CHOICES.at(-1);
+const showSecond = () => { $("secondName").textContent = lighter(); };
+$("model").onchange = showSecond; showSecond();
+
+let stop = false, out = null;
+$("stop").onclick = () => { stop = true; $("stop").disabled = true; $("stop").textContent = "Stopping…"; };
+
+$("run").onclick = async () => {
+  const apiKey = $("key").value.trim() || saved("key");
+  if (!apiKey) { alertBox("Paste your Gemini API key first (or save it in Samjho's ⚙️ Settings)."); return; }
+  let fixtures;
+  try { fixtures = await (await fetch("./eval/fixtures.json")).json(); }
+  catch { alertBox("Couldn't load the test letters. Open this page from the website, not as a downloaded file."); return; }
+
+  const models = [$("model").value, ...($("second").checked ? [lighter()] : [])];
+  const repeats = $("twice").checked ? 2 : 1;
+  const withBaseline = $("baseline").checked;
+  const total = models.length * fixtures.length * repeats * (withBaseline ? 2 : 1);
+  let n = 0;
+  stop = false;
+  $("run").disabled = true;
+  $("progressCard").classList.remove("hidden");
+  $("doneCard").classList.add("hidden");
+  $("log").textContent = "";
+  try {
+    out = await runEvaluation({
+      apiKey, models, repeats, withBaseline, fixtures,
+      today: "2026-11-24", // fixed so results are comparable between runs
+      delay: 5000,
+      shouldStop: () => stop,
+      log: (m) => {
+        n++;
+        $("log").textContent = m + "\n" + $("log").textContent;
+        $("bar").style.width = Math.min(100, Math.round((100 * n) / total)) + "%";
+        $("stage").textContent = `${n} of ${total} AI calls done · about ${Math.ceil(((total - n) * 8) / 60)} min left`;
+        if (/bad_key|rejected/i.test(m)) stop = true;
+      },
+    });
+    $("report").textContent = out.md + (out.baselineMd ? "\n\n" + out.baselineMd : "");
+    $("doneCard").classList.remove("hidden");
+    $("doneCard").scrollIntoView({ behavior: "smooth" });
+  } catch (e) {
+    alertBox("The test stopped: " + (e.message || e));
+  } finally {
+    $("run").disabled = false; $("stop").disabled = false; $("stop").textContent = "Stop after this letter";
+  }
+};
+
+function alertBox(msg) {
+  $("progressCard").classList.remove("hidden");
+  $("stage").innerHTML = "";
+  const p = document.createElement("p"); p.className = "err"; p.textContent = msg;
+  $("stage").append(p);
+}
+function download(name, text) {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([text], { type: "text/markdown" }));
+  a.download = name; document.body.append(a); a.click(); a.remove();
+}
+$("dlResults").onclick = () => out && download("results.md", out.md);
+$("dlBaseline").onclick = () => out && download("baseline-answers.md", out.baselineMd || "(comparison was switched off)");
+$("copyAll").onclick = async () => {
+  try { await navigator.clipboard.writeText($("report").textContent); $("copied").textContent = "Copied! Paste it into the chat."; }
+  catch { $("copied").textContent = "Couldn't copy automatically. Long-press inside the box below → Select all → Copy."; }
+};
+</script>
+</body>
+</html>

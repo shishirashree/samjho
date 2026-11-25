@@ -159,7 +159,7 @@ export function buildFollowupPrompt(language, sourceText, question) {
 export class SamjhoError extends Error {
   constructor(kind, message, extra = {}) {
     super(message);
-    this.kind = kind; // "no_key" | "offline" | "bad_key" | "rate_limit" | "busy" | "model" | "too_big" | "blocked" | "bad_output" | "server"
+    this.kind = kind; // "no_key" | "offline" | "bad_key" | "rate_limit" | "quota_day" | "busy" | "model" | "too_big" | "blocked" | "bad_output" | "server"
     Object.assign(this, extra);
   }
 }
@@ -183,15 +183,19 @@ export async function callGemini({ apiKey, model, parts, schema, fetchImpl = fet
     throw new SamjhoError("offline", "Couldn't reach the AI service. Check your internet connection and try again.");
   }
   if (!res.ok) {
-    let detail = "", retryAfterMs = 0;
+    let detail = "", retryAfterMs = 0, quotaIds = "";
     try {
       const err = (await res.json())?.error;
       detail = err?.message || "";
       // Google says how long to wait, e.g. details: [{ retryDelay: "31s" }]
       const delay = (err?.details || []).map((d) => d?.retryDelay).find(Boolean);
       if (delay) retryAfterMs = Math.ceil(parseFloat(delay) * 1000) || 0;
+      // Which limit was hit? e.g. quotaId "GenerateRequestsPerDayPerProjectPerModel-FreeTier"
+      quotaIds = (err?.details || []).flatMap((d) => (d?.violations || []).map((v) => v?.quotaId || "")).join(" ");
     } catch { /* ignore */ }
-    if (res.status === 429) throw new SamjhoError("rate_limit", "The free AI quota is busy. Wait a minute and try again.", { detail, retryAfterMs });
+    if (res.status === 429 && /per ?day/i.test(quotaIds + " " + detail))
+      throw new SamjhoError("quota_day", `Today's free limit for ${model} is used up. It resets every day at midnight California time (1:30 PM in India). Pick another model in Settings, or try again later.`, { detail, quotaIds });
+    if (res.status === 429) throw new SamjhoError("rate_limit", "The free AI quota is busy. Wait a minute and try again.", { detail, retryAfterMs, quotaIds });
     if (res.status === 401 || res.status === 403 || (res.status === 400 && /api key/i.test(detail)))
       throw new SamjhoError("bad_key", "Your API key was rejected. Check it in Settings.", { detail });
     if (res.status === 404) throw new SamjhoError("model", `The model "${model}" isn't available. Pick another model in Settings.`, { detail });
@@ -261,7 +265,7 @@ export async function explainDocument({ apiKey, model, language, input, fetchImp
       break;
     } catch (e) {
       lastErr = e;
-      if (!["busy", "rate_limit", "model"].includes(e.kind)) throw e; // other errors won't be fixed by another model
+      if (!["busy", "rate_limit", "quota_day", "model"].includes(e.kind)) throw e; // other errors won't be fixed by another model
     }
   }
   if (!raw) throw lastErr;

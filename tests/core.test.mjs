@@ -252,3 +252,14 @@ test("429 waits as long as Google asks (retryDelay)", async () => {
   await explainDocument({ apiKey: "k", model: "m", language: "English", input: { text: SAMPLE_TEXT }, fetchImpl, today: "2026-11-24", sleep: async (ms) => waits.push(ms) });
   assert.deepEqual(waits, [31000]);
 });
+
+test("a used-up DAILY quota is not retried, but a backup model is tried", async () => {
+  const asked = [];
+  const daily = { ok: false, status: 429, json: async () => ({ error: { message: "Quota exceeded", details: [{ "@type": "type.googleapis.com/google.rpc.QuotaFailure", violations: [{ quotaId: "GenerateRequestsPerDayPerProjectPerModel-FreeTier" }] }] } }) };
+  const fetchImpl = async (url) => { asked.push(url.match(/models\/([^:]+)/)[1]); return url.includes("tired") ? daily : { ok: true, status: 200, json: async () => geminiBody(SAMPLE_RESULT) }; };
+  await assert.rejects(callGemini({ apiKey: "k", model: "tired", parts: [], schema: {}, fetchImpl }), { kind: "quota_day" });
+  asked.length = 0;
+  const r = await explainDocument({ apiKey: "k", model: "tired", fallbackModels: ["fresh"], language: "English", input: { text: SAMPLE_TEXT }, fetchImpl, today: "2026-11-24", sleep: async () => { throw new Error("should not wait"); } });
+  assert.deepEqual(asked, ["tired", "fresh"]);
+  assert.equal(r.model_used, "fresh");
+});

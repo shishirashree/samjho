@@ -76,14 +76,17 @@ function compareBaseline(text, f, ctx) {
 export const baselinePrompt = (f) => `Can you explain this to me in simple ${f.language}? What do I need to do, by when, and how much do I have to pay?\n\n${f.text}`;
 
 export async function runEvaluation({ apiKey, models, repeats = 2, delay = 9000, today = "2026-11-24", fixtures, withBaseline = true,
-  log = () => {}, sleep = (ms) => new Promise((r) => setTimeout(r, ms)), shouldStop = () => false }) {
+  log = () => {}, sleep = (ms) => new Promise((r) => setTimeout(r, ms)), shouldStop: userStop = () => false }) {
+  // A used-up DAILY limit won't recover by waiting, so stop instead of failing every call.
+  let dailyLimitHit = false;
+  const shouldStop = () => dailyLimitHit || userStop();
 const all = {};
 for (const model of models) {
   all[model] = [];
   for (const f of fixtures) {
     if (shouldStop()) break;
     const runs = [];
-    for (let i = 0; i < repeats; i++) {
+    for (let i = 0; i < repeats && !dailyLimitHit; i++) {
       const label = `${model} ${f.id} run ${i + 1}`;
       const t0 = Date.now();
       try {
@@ -94,12 +97,13 @@ for (const model of models) {
         log(`${label}: ${s.passed ? "PASS" : "FAIL " + JSON.stringify(s.checks)}`);
       } catch (e) {
         runs.push({ ok: false, ms: Date.now() - t0, error: `${e.kind || "error"}: ${e.message}` });
-        log(`${label}: ERROR ${e.message}`);
+        log(`${label}: ERROR ${e.message}${e.detail ? ` [Google: ${String(e.detail).slice(0, 160)}]` : ""}`);
+        if (e.kind === "quota_day") dailyLimitHit = true;
       }
       await sleep(delay);
     }
     const base = [];
-    if (withBaseline) for (let i = 0; i < repeats; i++) {
+    if (withBaseline) for (let i = 0; i < repeats && !dailyLimitHit; i++) {
       const label = `${model} ${f.id} plain chatbot run ${i + 1}`;
       try {
         const text = await callWithRetry({ apiKey, model, parts: [{ text: baselinePrompt(f) }], schema: null, temperature: 1 }, { sleep, onRetry: (e, n) => log(`${label}: busy, retry ${n}`, true) });
@@ -108,7 +112,8 @@ for (const model of models) {
         log(`${label}: missed ${c.missed}, wrong ${c.wrongShown}`);
       } catch (e) {
         base.push({ ok: false, error: e.message });
-        log(`${label}: ERROR ${e.message}`);
+        log(`${label}: ERROR ${e.message}${e.detail ? ` [Google: ${String(e.detail).slice(0, 160)}]` : ""}`);
+        if (e.kind === "quota_day") dailyLimitHit = true;
       }
       await sleep(delay);
     }
@@ -120,7 +125,8 @@ for (const model of models) {
 // ---- markdown report ----
 const md = [];
 md.push(`# Samjho evaluation results`, ``, `Run on ${new Date().toISOString().slice(0, 16).replace("T", " ")} UTC · "today" fixed to ${today} · ${repeats} run(s) per document · all test documents are fictional.`, ``);
-md.push(`## Summary`, ``, `| Model | Documents fully correct | Individual checks passed | Facts matched to source | Facts flagged ⚠ | Avg time |`, `|---|---|---|---|---|---|`);
+if (dailyLimitHit) md.push(`> ⛔ **Stopped early: the model's free daily limit was used up.** Results below are incomplete; run again after the daily reset or with another model.`, ``);
+  md.push(`## Summary`, ``, `| Model | Documents fully correct | Individual checks passed | Facts matched to source | Facts flagged ⚠ | Avg time |`, `|---|---|---|---|---|---|`);
 for (const model of models) {
   const runs = all[model].flatMap((x) => x.runs);
   const okRuns = runs.filter((r) => r.ok);

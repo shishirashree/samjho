@@ -48,6 +48,13 @@ export function extractDates(text, today) {
   return [...out].sort();
 }
 
+// True only when the answer says THIS message is a scam/fake. A general safety tip
+// ("never share your OTP", "beware of any fake calls") does not count.
+// Run 1 wrongly counted "किसी भी फर्जी फोन" (= "any fake call") as a scam warning.
+const SCAM = "(?:scam|fraud(?:ulent)?|phishing|fake|फर्जी|फ़र्ज़ी|धोखाधड़ी|ठगी|स्कैम)";
 export function mentionsScam(text) {
-  return /\b(scam|fraud|phishing|fake|suspicious|not genuine|do not share (?:the |your )?otp|don't share (?:the |your )?otp)\b|धोखाधड़ी|फर्जी|ठगी|स्कैम/i.test(text);
+  const sentences = String(text).split(/(?<=[.!?।\n])/u);
+  const claim = new RegExp(`(?:\\b(?:this|it|message|sms|text|notice)\\b|यह|ये|मैसेज|संदेश)[^.!?।\\n]{0,40}?${SCAM}`, "iu");
+  const general = new RegExp(`(?:\\bany\\b|किसी भी|ऐसे|other)\\s*(?:\\S+\\s+){0,2}?${SCAM}`, "iu");
+  return sentences.some((s) => claim.test(s) && !general.test(s.slice(Math.max(0, s.search(new RegExp(SCAM, "iu")) - 20))));
 }

@@ -31,7 +31,7 @@
 <main>
   <a href="./">← Back to Samjho</a>
   <h1>AI test run</h1>
-  <p>This page sends 7 <b>fictional</b> test letters to the AI. It checks Samjho's answers against the correct answers, and compares them with a plain chatbot answer. It takes about 5 minutes. Keep this tab open and the screen on.</p>
+  <p>This page sends 7 <b>fictional</b> test letters to the AI. It checks Samjho's answers against the correct answers, and compares them with a plain chatbot answer. It takes about 10 minutes, because the free tier allows only a few requests per minute. Keep this tab open and the screen on.</p>
 
   <section class="card">
     <label>Gemini API key
@@ -43,6 +43,9 @@
     <label class="check"><input type="checkbox" id="second"><span>Also test a lighter model (<b id="secondName"></b>) for comparison. This doubles the time.</span></label>
     <label class="check"><input type="checkbox" id="baseline" checked><span>Compare with a plain chatbot answer</span></label>
     <label class="check"><input type="checkbox" id="twice" checked><span>Run every letter twice (repeat check)</span></label>
+    <label>Only these letters <small style="font-weight:400;color:var(--muted)">(leave empty for all 7, or e.g. E6,E7)</small>
+      <input type="text" id="only" placeholder="E1,E2,… (optional)" autocomplete="off" style="font:inherit;padding:10px 12px;border:1px solid var(--line);border-radius:12px;min-height:44px;background:#fffdf8">
+    </label>
     <button class="primary" id="run">▶ Run the test</button>
     <p class="note">Uses your free Gemini quota. The key is only used in this browser.</p>
   </section>
@@ -85,9 +88,12 @@ $("run").onclick = async () => {
   const apiKey = $("key").value.trim() || saved("key");
   if (!apiKey) { alertBox("Paste your Gemini API key first (or save it in Samjho's ⚙️ Settings)."); return; }
   let fixtures;
-  try { fixtures = await (await fetch("./eval/fixtures.json")).json(); }
+  try { fixtures = await (await fetch("./eval/fixtures.json", { cache: "no-store" })).json(); }
   catch { alertBox("Couldn't load the test letters. Open this page from the website, not as a downloaded file."); return; }
 
+  const only = $("only").value.toUpperCase().split(/[^A-Z0-9]+/).filter(Boolean);
+  if (only.length) fixtures = fixtures.filter((f) => only.includes(f.id));
+  if (!fixtures.length) { alertBox("None of those letter IDs exist. Use E1 to E7."); return; }
   const models = [$("model").value, ...($("second").checked ? [lighter()] : [])];
   const repeats = $("twice").checked ? 2 : 1;
   const withBaseline = $("baseline").checked;
@@ -102,14 +108,14 @@ $("run").onclick = async () => {
     out = await runEvaluation({
       apiKey, models, repeats, withBaseline, fixtures,
       today: "2026-11-24", // fixed so results are comparable between runs
-      delay: 5000,
+      delay: 9000, // free tier: stay under ~7 requests per minute
       shouldStop: () => stop,
       log: (m, isRetry) => {
         if (isRetry) { $("log").textContent = m + "\n" + $("log").textContent; return; }
         n++;
         $("log").textContent = m + "\n" + $("log").textContent;
         $("bar").style.width = Math.min(100, Math.round((100 * n) / total)) + "%";
-        $("stage").textContent = `${n} of ${total} AI calls done · about ${Math.ceil(((total - n) * 8) / 60)} min left`;
+        $("stage").textContent = `${n} of ${total} AI calls done · about ${Math.ceil(((total - n) * 20) / 60)} min left`;
         if (/bad_key|rejected/i.test(m)) stop = true;
       },
     });

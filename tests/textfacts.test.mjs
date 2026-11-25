@@ -21,3 +21,12 @@ test("scam mentions", () => {
   assert.equal(mentionsScam("This looks like a scam. Do not call that number."), true);
   assert.equal(mentionsScam("This is a normal bill."), false);
 });
+
+test("scam scorer counts only answers that call THIS message a scam (run 1 bug)", () => {
+  assert.equal(mentionsScam("**WARNING: This message is a SCAM.**"), true);
+  assert.equal(mentionsScam("⚠️ **THIS IS A SCAM! DO NOT RESPOND.**"), true);
+  assert.equal(mentionsScam("यह मैसेज फर्जी है, इसका जवाब न दें।"), true);
+  // general safety advice from the genuine bank letter (E5 run 2) is not a scam warning
+  assert.equal(mentionsScam("इसलिए बैंक के नाम से आने वाले किसी भी फर्जी फोन या मैसेज पर अपनी गोपनीय जानकारी न दें।"), false);
+  assert.equal(mentionsScam("The bank will never ask for your OTP. Beware of any fake calls."), false);
+});

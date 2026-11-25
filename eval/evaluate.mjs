@@ -75,7 +75,7 @@ function compareBaseline(text, f, ctx) {
 // What a typical person types into a chatbot. Deliberately ordinary, not a prompt-engineered one.
 export const baselinePrompt = (f) => `Can you explain this to me in simple ${f.language}? What do I need to do, by when, and how much do I have to pay?\n\n${f.text}`;
 
-export async function runEvaluation({ apiKey, models, repeats = 2, delay = 6000, today = "2026-11-24", fixtures, withBaseline = true,
+export async function runEvaluation({ apiKey, models, repeats = 2, delay = 9000, today = "2026-11-24", fixtures, withBaseline = true,
   log = () => {}, sleep = (ms) => new Promise((r) => setTimeout(r, ms)), shouldStop = () => false }) {
 const all = {};
 for (const model of models) {

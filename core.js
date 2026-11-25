@@ -183,9 +183,15 @@ export async function callGemini({ apiKey, model, parts, schema, fetchImpl = fet
     throw new SamjhoError("offline", "Couldn't reach the AI service. Check your internet connection and try again.");
   }
   if (!res.ok) {
-    let detail = "";
-    try { detail = (await res.json())?.error?.message || ""; } catch { /* ignore */ }
-    if (res.status === 429) throw new SamjhoError("rate_limit", "The free AI quota is busy. Wait a minute and try again.", { detail });
+    let detail = "", retryAfterMs = 0;
+    try {
+      const err = (await res.json())?.error;
+      detail = err?.message || "";
+      // Google says how long to wait, e.g. details: [{ retryDelay: "31s" }]
+      const delay = (err?.details || []).map((d) => d?.retryDelay).find(Boolean);
+      if (delay) retryAfterMs = Math.ceil(parseFloat(delay) * 1000) || 0;
+    } catch { /* ignore */ }
+    if (res.status === 429) throw new SamjhoError("rate_limit", "The free AI quota is busy. Wait a minute and try again.", { detail, retryAfterMs });
     if (res.status === 401 || res.status === 403 || (res.status === 400 && /api key/i.test(detail)))
       throw new SamjhoError("bad_key", "Your API key was rejected. Check it in Settings.", { detail });
     if (res.status === 404) throw new SamjhoError("model", `The model "${model}" isn't available. Pick another model in Settings.`, { detail });
@@ -219,9 +225,11 @@ export function parseJsonLoose(text) {
   }
 }
 
-// Retry temporary failures: a garbled answer once; an overloaded or rate-limited
-// service up to `retries` times, waiting longer each time (4s, then 10s).
+// Retry temporary failures: a garbled answer once; an overloaded service after
+// 4s then 10s; a used-up free quota (429) after the wait Google suggests, or
+// 20s then 40s (the free tier counts requests per minute, so short waits don't help).
 export const RETRY_WAITS = [4000, 10000];
+export const RATE_LIMIT_WAITS = [20000, 40000];
 export async function callWithRetry(opts, { sleep = defaultSleep, onRetry = () => {} } = {}) {
   let garbled = 0;
   for (let attempt = 0; ; attempt++) {
@@ -232,7 +240,8 @@ export async function callWithRetry(opts, { sleep = defaultSleep, onRetry = () =
       const temporary = e.kind === "busy" || e.kind === "rate_limit";
       if (!temporary || attempt >= RETRY_WAITS.length) throw e;
       onRetry(e, attempt + 1);
-      await sleep(RETRY_WAITS[attempt]);
+      const wait = e.kind === "rate_limit" ? Math.min(60000, Math.max(RATE_LIMIT_WAITS[attempt], e.retryAfterMs || 0)) : RETRY_WAITS[attempt];
+      await sleep(wait);
     }
   }
 }
@@ -384,10 +393,23 @@ export function checkResult(r, source, today = isoToday()) {
     stats.total++;
     if (ok) stats.verified++; else stats.flagged++;
   };
+  // Dates the document itself proves: an item whose quote is found AND contains its date.
+  // An action like "bring the report card on the day of the meeting" (12 Dec) can't
+  // show the date in its own quote, but if another verified quote proves 12 Dec is a
+  // date in this letter, that's good enough. Found in real test run 1 (E2).
+  for (const a of r.actions) if (a.deadline && !isValidIsoDate(a.deadline)) a.deadline = "";
+  const proven = new Set([
+    ...r.actions.filter((a) => a.deadline && dateMatchesQuote(a.deadline, a.quote) && quoteStatus(a.quote, source) !== "unverified").map((a) => a.deadline),
+    ...r.dates.filter((d) => isValidIsoDate(d.date) && dateMatchesQuote(d.date, d.quote) && quoteStatus(d.quote, source) !== "unverified").map((d) => d.date),
+  ]);
+  const dateCheck = (iso, quote, missing) => {
+    if (dateMatchesQuote(iso, quote)) return [true, ""];
+    if (proven.has(iso)) return [true, "Date confirmed by another line of the document"];
+    return [false, missing];
+  };
   for (const a of r.actions) {
-    if (a.deadline && !isValidIsoDate(a.deadline)) { a.deadline = ""; }
-    const v = a.deadline ? dateMatchesQuote(a.deadline, a.quote) : null;
-    mark(a, v, v === false ? "Deadline not found in the quoted words" : "");
+    const [v, note] = a.deadline ? dateCheck(a.deadline, a.quote, "Deadline not found in the document") : [null, ""];
+    mark(a, v, note);
     if (a.deadline) a.daysLeft = daysBetween(today, a.deadline);
   }
   for (const m of r.money) {
@@ -396,8 +418,8 @@ export function checkResult(r, source, today = isoToday()) {
   }
   for (const d of r.dates) {
     const valid = isValidIsoDate(d.date);
-    const v = valid && dateMatchesQuote(d.date, d.quote);
-    mark(d, v, !valid ? "Not a real date" : v ? "" : "Date not found in the quoted words");
+    const [v, note] = valid ? dateCheck(d.date, d.quote, "Date not found in the document") : [false, "Not a real date"];
+    mark(d, v, note);
     if (valid) d.daysLeft = daysBetween(today, d.date);
   }
   for (const w of r.warnings) mark(w, null);

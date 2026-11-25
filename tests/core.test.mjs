@@ -226,3 +226,29 @@ test("a wrong key is not retried and does not switch models", async () => {
   await assert.rejects(explainDocument({ apiKey: "k", model: "a", fallbackModels: ["b"], language: "English", input: { text: "x" }, fetchImpl, sleep: async () => {} }), { kind: "bad_key" });
   assert.equal(calls, 1);
 });
+
+// ---- found in real run 1 ----
+test("an action dated by another line of the letter is not a false alarm (E2)", () => {
+  const src = "The Parent-Teacher Meeting will be held on Saturday, 12 December 2026. Students must bring their signed report card on the day of the meeting.";
+  const r = checkResult(normalizeResult({
+    actions: [{ task: "Bring report card", deadline: "2026-12-12", quote: "Students must bring their signed report card on the day of the meeting." }],
+    dates: [{ label: "Meeting", date: "2026-12-12", quote: "will be held on Saturday, 12 December 2026" }],
+  }), src, "2026-11-24");
+  assert.equal(r.actions[0].check.ok, true);
+  assert.match(r.actions[0].check.note, /another line/);
+});
+
+test("a date that nothing in the letter proves is still flagged (E3 'tonight')", () => {
+  const src = "Your Electricity power will be disconnected tonight at 9.30 pm";
+  const r = checkResult(normalizeResult({ dates: [{ label: "Cut-off", date: "2026-11-24", quote: "will be disconnected tonight at 9.30 pm" }] }), src, "2026-11-24");
+  assert.equal(r.dates[0].check.ok, false);
+});
+
+test("429 waits as long as Google asks (retryDelay)", async () => {
+  let calls = 0; const waits = [];
+  const fetchImpl = async () => (++calls === 1
+    ? { ok: false, status: 429, json: async () => ({ error: { message: "quota", details: [{ "@type": "type.googleapis.com/google.rpc.RetryInfo", retryDelay: "31s" }] } }) }
+    : { ok: true, status: 200, json: async () => geminiBody(SAMPLE_RESULT) });
+  await explainDocument({ apiKey: "k", model: "m", language: "English", input: { text: SAMPLE_TEXT }, fetchImpl, today: "2026-11-24", sleep: async (ms) => waits.push(ms) });
+  assert.deepEqual(waits, [31000]);
+});

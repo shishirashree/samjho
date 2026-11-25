@@ -5,7 +5,7 @@
 // Usage (from the project folder):
 //   GEMINI_API_KEY=your_key node eval/run-eval.mjs
 //   GEMINI_API_KEY=your_key node eval/run-eval.mjs --models gemini-3.8-flash,gemini-3.1-flash-lite --repeats 2
-// Options: --models a,b  --repeats N (default 2)  --only E1,E3  --delay ms (default 6000)  --today YYYY-MM-DD
+// Options: --models a,b  --repeats N (default 2)  --only E1,E3  --delay ms (default 9000)  --today YYYY-MM-DD
 //          --baseline no   (skip the "plain chatbot" comparison, which is ON by default)
 import { readFile, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
@@ -27,7 +27,7 @@ const { all, md, baselineMd } = await runEvaluation({
   apiKey,
   models: (args.models || DEFAULT_MODEL).split(",").map((s) => s.trim()).filter(Boolean),
   repeats: Math.max(1, +(args.repeats || 2)),
-  delay: +(args.delay || 6000),
+  delay: +(args.delay || 9000),
   today: args.today || "2026-11-24",
   fixtures, withBaseline,
   log: (m) => console.log(m),

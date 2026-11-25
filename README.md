@@ -45,7 +45,7 @@ GEMINI_API_KEY=... npm run eval -- --models gemini-3.8-flash,gemini-3.1-flash-li
 
 The evaluation runs 7 **fictional** test documents through the real AI. That includes a Hindi notice, a scam SMS, a vague landlord message and a non-document. It writes `eval/results.md`.
 
-**Samjho vs a plain chatbot.** The evaluation also pastes each letter into the *same* model with an ordinary question (*"Can you explain this to me in simple English? What do I need to do, by when, and how much do I have to pay?"*). It then scores both the same way: key facts missed, wrong amounts and dates reaching the reader without a warning, and whether a scam was flagged. The chatbot's answers are saved in `eval/baseline-answers.md` so anyone can read them.
+**Samjho vs a plain chatbot.** The evaluation also pastes each letter into the *same* model with an ordinary question (*"Can you explain this to me in simple English? What do I need to do, by when, and how much do I have to pay?"*). It then scores both the same way: key facts missed, wrong amounts and dates reaching the reader without a warning, and whether a scam was flagged. The chatbot's answers are saved in `eval/baseline-answers.md` so anyone can read them. Earlier runs are kept in `eval/history/`.
 
 ## How it works
 ```

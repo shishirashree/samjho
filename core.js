@@ -2,10 +2,12 @@
 // Everything here is plain logic, so it can run in the browser AND in Node
 // (for tests and the evaluation script). Keep UI code in app.js.
 
-export const DEFAULT_MODEL = "gemini-3.8-flash";
+// Default = the model the evaluation was run on (eval/history), so the app
+// behaves like the results we report.
+export const DEFAULT_MODEL = "gemini-3.6-flash";
 export const MODEL_CHOICES = [
-  "gemini-3.8-flash",
   "gemini-3.6-flash",
+  "gemini-3.8-flash",
   "gemini-3.5-flash-lite",
   "gemini-3.1-flash-lite",
 ];

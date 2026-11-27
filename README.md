@@ -38,7 +38,7 @@ No build step and nothing to install. It is three plain files: `index.html`, `ap
 
 ## Tests
 ```bash
-npm test                      # 37 offline unit tests (fact checker, dates, calendar, deadlines list, retries, daily-limit handling and backup model)
+npm test                      # 38 offline unit tests (fact checker, dates, calendar, deadlines list, retries, daily-limit handling and backup model)
 GEMINI_API_KEY=... npm run eval -- --models gemini-3.8-flash,gemini-3.1-flash-lite --repeats 2
 ```
 **No laptop?** Open `eval.html` on the live site (link at the bottom of the app) and tap **Run the test**. It runs the same evaluation in your browser and lets you copy or download the reports.
@@ -83,7 +83,7 @@ photo/PDF/text ─► Gemini (structured JSON: summary, actions, money, dates, w
 - Documents are sent to Google's Gemini API. On the free tier, Google may use the data to improve its products, so users should cover ID numbers.
 
 ## AI disclosure
-- **In the product:** Google Gemini (default `gemini-3.8-flash`, selectable) reads the image, PDF or text and returns structured JSON. Everything else (fact checking, dates, calendar) is ordinary code.
+- **In the product:** Google Gemini (default `gemini-3.6-flash`, the model the evaluation was run on; selectable) reads the image, PDF or text and returns structured JSON. Everything else (fact checking, dates, calendar) is ordinary code.
 - **During development:** see [DEV_LOG.md](DEV_LOG.md).
 
 ## License

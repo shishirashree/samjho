@@ -37,3 +37,19 @@ test("a sentence ending in a month, then a numbered line, is not a date (run 2 b
   assert.deepEqual(extractDates("Meeting on Dec. 12, 2026", "2026-11-24"), ["2026-12-12"]);
   assert.deepEqual(extractDates("paid in October. 5 people came", "2026-11-24"), []);
 });
+
+test("chatbot is not marked as missing an amount it wrote without ₹ (run 3 bug)", async () => {
+  const { runEvaluation } = await import("../eval/evaluate.mjs");
+  const fixtures = [{ id: "E6", name: "landlord", difficulty: "demanding", language: "English",
+    text: "Rent is going up from next month, new rent will be 14000.",
+    expect: { amounts: ["14000"], dates: [], allowed_dates: [], scam: false, urgency: ["low", "medium"] } }];
+  const reply = (body) => ({ ok: true, status: 200, json: async () => ({ candidates: [{ content: { parts: [{ text: body }] } }] }) });
+  const old = globalThis.fetch;
+  globalThis.fetch = async (url, o) => JSON.parse(o.body).generationConfig.responseSchema
+    ? reply(JSON.stringify({ urgency: "low", money: [{ label: "rent", amount: "14000", quote: "new rent will be 14000" }] }))
+    : reply("* **14,000** for your rent every month.");
+  try {
+    const { all } = await runEvaluation({ apiKey: "k", models: ["m"], repeats: 1, delay: 0, fixtures, sleep: async () => {} });
+    assert.equal(all.m[0].base[0].cmp.missed, 0);
+  } finally { globalThis.fetch = old; }
+});

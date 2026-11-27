@@ -13,14 +13,14 @@
 | | Plain chatbot | Samjho |
 |---|---|---|
 | Key amounts and dates found | all | all |
-| Wrong amounts or dates | 0 (19 answers) | 0 shown as ✓ |
+| Wrong amounts or dates | 0 (25 answers) | 0 shown as ✓ |
 | Scam SMS flagged | yes | yes |
-| Words to read | ~190 | ~100 |
+| Words to read | ~170–190 | ~55–105 |
 | Can you check each fact? | no | every fact links to the exact words in the letter |
-| Claims not in the letter | yes ("KYC is completely free", "$0" for an Indian SMS) | no; only what the letter says |
+| Claims not in the letter | yes ("KYC is completely free", "you may have to pay for the purifier service", "$0" for an Indian SMS) | no; only what the letter says |
 | Deadlines kept for later | no | countdown, calendar reminder, **My deadlines** list |
 
-**Honest result:** on clear typed letters the chatbot was just as accurate. Samjho's advantage is that you can **check** every fact, you read **about half as much**, it's in **your language with one tap**, and it **turns the letter into actions** (deadlines, reminders, read-aloud, share with family).
+**Honest result:** on clear typed letters the chatbot was just as accurate. Samjho's advantage is that you can **check** every fact, you read **about half as much or less**, it's in **your language with one tap**, and it **turns the letter into actions** (deadlines, reminders, read-aloud, share with family).
 
 ## What did I build during the hackathon?
 
@@ -31,7 +31,7 @@
 - **My deadlines:** remembers up to 30 letters on the device. It shows Overdue / This week / Later across all of them, with tick-to-done and "add all to calendar".
 - **Action tools:** calendar file with a 1-day reminder, 🔊 read aloud, 📤 share to WhatsApp, and 💬 questions answered only from the letter.
 - **Evaluation:** 7 fictional test letters with correct answers written by me, a plain-chatbot comparison, a command-line runner, and an in-browser runner ([eval.html](https://shishirashree.github.io/samjho/eval.html)) so the test runs on a phone.
-- **37 offline unit tests** (`npm test`).
+- **38 offline unit tests** (`npm test`).
 
 **Third-party, not my work:** Google Gemini API (the AI model), GitHub Pages (hosting), the browser's Web Speech API (read aloud). No frameworks or libraries.
 
@@ -42,11 +42,11 @@
 - **Why this choice:** Gemini reads photos and PDFs directly, so no separate OCR step is needed. It can be forced to answer in a fixed JSON structure ([Gemini structured output docs](https://ai.google.dev/gemini-api/docs/structured-output)). It has a free tier, which matters for students and for users who won't pay for a letter explainer. I didn't benchmark other AI providers.
 - **Project-specific decision: "show your proof".** The AI must quote the exact words behind every fact. Then **ordinary code** checks three things: the quote really appears in the letter, the amount or date is inside that quote, and the date is a real one. It also handles Indian digits (४२००) and Hindi month names (दिसंबर).
   - *Evidence it works:* on the scam SMS, the AI turned "tonight" into a specific calendar date. The checker marked it **⚠** instead of showing it as fact. When we fed it a deliberately wrong answer, it flagged all 9 wrong facts.
-  - *Evidence we tuned it:* test run 1 had 2 false alarms (an action dated "on the day of the meeting"). After the fix, test run 2 matched **68/68 facts with 0 false alarms**.
-- **How I assessed quality (two full runs, 2 tries per letter):**
+  - *Evidence we tuned it:* test run 1 had 2 false alarms (an action dated "on the day of the meeting"). After the fix, test runs 2 and 3 matched **82/82 facts with 0 false alarms**.
+- **How I assessed quality (3 runs, 2 tries per letter, every letter covered):**
   - Run 1: 68/70 checks passed.
-  - Run 2, after fixes: 57/58 checks passed, 68/68 facts matched.
-  - The one repeated miss: the AI rated a vague rent-rise message "high" urgency in 1 of 2 runs (I expected medium).
+  - Runs 2 and 3, after fixes: 92/94 checks passed, 82/82 facts matched.
+  - The only repeated miss: the AI rated a vague rent-rise message "high" urgency in 3 of 6 tries (I expected low or medium). With the test's date fixed to 24 Nov, "from next month" is only a week away, so "high" is arguable. I kept it as a failure rather than change the expected answer.
 - **Limits this evidence shows:** the test letters are fictional and typed. Photos are where reading mistakes happen, and I tested only one real photo (a restaurant bill: amounts and date correct). For photos, the checker compares against the AI's own reading of the page, so it can't catch a misread of the paper itself. Urgency is a judgement and isn't always consistent.
 
 ### AI during development
@@ -57,6 +57,7 @@
   - Run 2 reported **1 "wrong fact" by the chatbot**. Reading the answer showed it was *our scorer's* bug: it read "October." followed by "2." on the next line as "October 2". → **Changed**, and all 19 chatbot answers were re-scored.
   - My **real photo test** of a 2007 bill showed "passed 7116 days ago" and offered a calendar reminder. → **Changed:** old dates no longer get countdowns or reminders.
   - The test runs hit the **free daily limit**. → **Changed:** the app now detects this and switches to a backup model.
+  - Run 3 said the chatbot **missed** the ₹14,000 rent. Reading its answer, it wrote "14,000" without ₹, just as the landlord did. → **Changed:** the scorer now credits it. Chatbot misses across all 25 answers: 0.
   - **Kept:** the AI-written fact checker, after its tests and both runs held up.
 
 ## How can people access and use Samjho, and what does it achieve?
@@ -66,18 +67,18 @@
 - **Needs:** a browser, internet, and a free Gemini API key from [aistudio.google.com/apikey](https://aistudio.google.com/apikey). Paste it in ⚙️ Settings; it stays in your browser. Costs nothing on the free tier, which has daily limits. **Try a sample** works with no key.
 - **Main task:** photo of a letter → **Explain this** → a correct summary in the chosen language, every action/amount/date with ✓ or ⚠, the deadline countdown, and the letter saved to My deadlines.
 
-**Test results** (`gemini-3.6-flash`, fictional letters; [full reports](https://github.com/shishirashree/samjho/tree/main/eval/history)):
+**Test results** (`gemini-3.6-flash`, fictional letters, 3 runs × 2 tries; [full reports](https://github.com/shishirashree/samjho/tree/main/eval/history)):
 
 | Case | What should happen | What happened |
 |---|---|---|
 | E1 Electricity disconnection notice (ordinary) | Find Rs 2,340 / 50 / 150 and 30 Nov; no scam flag | ✅ All found, all ✓, in every run |
 | E2 School circular (ordinary) | Find ₹8,500 / ₹200, 10 Dec and 12 Dec | ✅ All found; after the fix, 0 false alarms |
-| Repeat check | Same answer each time | ✅ E1, E2 and E4 gave identical amounts and dates in all 4 runs |
+| Repeat check | Same answer each time | ✅ E1, E2, E4, E5 and E7 gave identical amounts and dates every time |
 | E3 Scam SMS (demanding, modelled on the real SBI-warned message) | Flag as scam; invent no dates | ✅ Flagged as scam in 4/4 runs. One run invented a date, which the checker marked ⚠ |
 | E4 Hindi tax notice explained in English (demanding) | ₹4,200 and 31 Dec from Hindi text | ✅ Found and verified in all runs |
-| E5 Bank letter explained in Hindi | Hindi summary, 15 Jan 2027 | ✅ |
-| E6 Vague landlord message | No invented date; say what's unclear | ✅ No invented date. Urgency was "high" in 2 of 4 runs (expected medium) |
-| E7 Random chat (not a document) | Invent nothing | ✅ (run 1) |
+| E5 Bank letter explained in Hindi | Hindi summary, 15 Jan 2027 | ✅ 5/5 completed tries (1 try lost to a network error) |
+| E6 Vague landlord message | ₹14,000; no invented date; say what's unclear | ✅ No invented date in 6/6. ❌ Urgency was "high" in 3 of 6 (expected low or medium) |
+| E7 Random chat (not a document) | Invent nothing | ✅ 3/3 completed tries: no actions, money or dates |
 
 **Design choices that cut user effort:**
 - One screen, three big inputs (camera, upload, paste). The language is remembered.

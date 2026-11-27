@@ -63,8 +63,12 @@ function compareSamjho(r, f) {
 function compareBaseline(text, f, ctx) {
   const src = new Set(numberTokens(f.text).map(strip)), ex = f.expect;
   const amounts = extractAmounts(text), dates = extractDates(text, ctx.today);
+  // "Missed" is generous: an expected amount counts as found if the number appears
+  // anywhere in the answer, even without ₹/Rs. (Run 3: the chatbot wrote "14,000",
+  // like the landlord did, and was wrongly counted as missing it.)
+  const anyNumbers = new Set(numberTokens(text).map(strip));
   return {
-    missed: ex.amounts.filter((a) => !amounts.includes(a)).length + ex.dates.filter((d) => !dates.includes(d)).length,
+    missed: ex.amounts.filter((a) => !amounts.includes(a) && !anyNumbers.has(a)).length + ex.dates.filter((d) => !dates.includes(d)).length,
     wrongShown: amounts.filter((a) => !src.has(a)).length + dates.filter((d) => !ex.allowed_dates.includes(d)).length, // a chat answer has no warnings
     wrongCaught: 0,
     scam: mentionsScam(text),
